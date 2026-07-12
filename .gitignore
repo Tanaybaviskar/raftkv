@@ -1,0 +1,7 @@
+# compiled binary (if you ever run `go build`)
+raftkv
+raftkv.exe
+
+# OS/editor junk
+.vscode/
+.DS_Store
