@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Day 1: Raft leader election (in-process, 3 nodes) ===")
+	fmt.Println("=== Day 3: Raft log replication (3 nodes) ===")
 
 	n1 := node.NewNode(1)
 	n2 := node.NewNode(2)
@@ -18,49 +18,102 @@ func main() {
 	for _, n := range nodes {
 		n.SetPeers(nodes)
 	}
-
 	for _, n := range nodes {
 		n.Start()
 	}
 
-	// Let an election settle, then report who's leader.
 	time.Sleep(1 * time.Second)
-	printStatus(nodes)
-	
-	for i :=0; i<2; i++{
-		leader := findLeader(nodes)
-		if leader == nil {
-			fmt.Println("No leader elected yet — try increasing the sleep above.")
-			return
-		}
-
-		fmt.Printf("\n>>> Killing current leader: node %d\n\n", leader.ID())
-		leader.Stop()
-
-		// Give the remaining nodes time to notice and re-elect.
-		time.Sleep(1 * time.Second)
-		printStatus(nodes)
-
+	leader := findLeader(nodes)
+	if leader == nil {
+		fmt.Println("No leader elected — retry.")
+		return
 	}
+	fmt.Printf("Leader is node %d\n", leader.ID())
+
+	//killing follower before proposing
+
+	// var follower *node.Node
+	// for _, n := range nodes {
+	// 	if n.ID() != leader.ID() {
+	// 		follower = n
+	// 		break
+	// 	}
+	// }
+	// follower.Stop()
+	// fmt.Printf("Killed follower node %d before proposing\n", follower.ID())
+
+	// leader.Propose("set x 1")
+	// leader.Propose("set y 2")
+	// leader.Propose("set z 3")
+
+	// time.Sleep(500 * time.Millisecond)
+	// printLogs(nodes)
+
+	//killing leader immediately after proposing
+
+	// leader.Propose("set x 1")
+	// leader.Stop()
+	// fmt.Printf("Killed leader node %d right after proposing\n", leader.ID())
+
+	// time.Sleep(500 * time.Millisecond)
+	// printLogs(nodes)
+
+	//proposing on a non leader
+
+	// var follower *node.Node
+	// for _, n := range nodes {
+	// 	if n.ID() != leader.ID() {
+	// 		follower = n
+	// 		break
+	// 	}
+	// }
+	// follower.Propose("sneaky write")
+	// fmt.Printf("Proposed directly on follower node %d (should NOT replicate)\n", follower.ID())
+
+	// time.Sleep(500 * time.Millisecond)
+	// printLogs(nodes)
+
+		if err := leader.Propose("set x 1"); err != nil {
+		fmt.Println("unexpected error:", err)
+	}
+	leader.Propose("set y 2")
+	leader.Propose("set z 3")
+ 
+	// Guard test: propose on a follower, should be rejected outright now.
+	var follower *node.Node
+	for _, n := range nodes {
+		if n.ID() != leader.ID() {
+			follower = n
+			break
+		}
+	}
+	if err := follower.Propose("sneaky write"); err != nil {
+		fmt.Printf("Correctly rejected: %v\n", err)
+	} else {
+		fmt.Println("BUG: follower accepted a write!")
+	}
+ 
+	time.Sleep(500 * time.Millisecond)
+	printLogs(nodes)
+
+
 	for _, n := range nodes {
 		n.Stop()
 	}
 }
 
-func printStatus(nodes []*node.Node) {
-	fmt.Println("--- cluster status ---")
+func printLogs(nodes []*node.Node) {
+	fmt.Println("--- replication status ---")
 	for _, n := range nodes {
-		fmt.Printf("node %d: term=%d state=%s\n", n.ID(), n.Term(), n.State())
+		fmt.Printf("node %d: commitIndex=%d log=%v\n", n.ID(), n.CommitIndex(), n.LogEntries())
 	}
-	fmt.Println("----------------------")
+	fmt.Println("---------------------------")
 }
 
 func findLeader(nodes []*node.Node) *node.Node {
 	for _, n := range nodes {
-		if(!n.IsKilled()){
-			if n.State() == node.Leader {
-				return n
-			}
+		if !n.IsKilled() && n.State() == node.Leader {
+			return n
 		}
 	}
 	return nil
